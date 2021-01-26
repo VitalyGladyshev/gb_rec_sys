@@ -129,7 +129,8 @@ class MainRecommender:
     def get_similar_users_recommendation(self, user, rec_num=5):
         """Рекомендуем топ-N товаров, среди купленных похожими юзерами"""
 
-        sim_users_list = [self.id_to_userid[usr] for usr, p in self.model.similar_users(self.userid_to_id[user], N=rec_num)]
+        sim_users_list = [self.id_to_userid[usr] for usr, p in self.model.similar_users(self.userid_to_id[user], 
+                                                                                        N=rec_num+1)[1:rec_num+1]]
         res = set()
         for user_in in sim_users_list:
             res.add(list(self.get_recommendations(user_in, rec_num=1))[0])
