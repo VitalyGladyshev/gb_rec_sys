@@ -33,8 +33,8 @@ class MainRecommender:
     def __init__(self, data, weighting=True):
         # your_code. Это не обязательная часть. Но если вам удобно что-либо посчитать тут - можно это сделать
 
-        prep_data = prefilter_items(data)
-        self.user_item_matrix = self.prepare_matrix(prep_data)  # pd.DataFrame
+        self.prep_data = prefilter_items(data)
+        self.user_item_matrix = self.prepare_matrix(self.prep_data)  # pd.DataFrame
         self.id_to_itemid, self.id_to_userid, \
         self.itemid_to_id, self.userid_to_id = self.prepare_dicts(self.user_item_matrix)
 
@@ -98,21 +98,46 @@ class MainRecommender:
 
         return model
 
-    def get_similar_items_recommendation(self, user, N=5):
+    
+    def get_recommendations(self, user, rec_num=5):
+        """Рекомендуем топ-N товаров"""
+
+        res = [self.id_to_itemid[rec[0]] for rec in 
+                        self.model.recommend(userid=self.userid_to_id[user], 
+                                            user_items=csr_matrix(self.user_item_matrix).tocsr(),   # на вход user-item matrix
+                                            N=rec_num, 
+                                            filter_already_liked_items=False, 
+                                            filter_items=[self.itemid_to_id[999999]],  # !!! 
+                                            recalculate_user=True)]
+        return res
+    
+    def get_similar_items_recommendation(self, user, rec_num=5):
         """Рекомендуем товары, похожие на топ-N купленных юзером товаров"""
 
-        # your_code
-        # Практически полностью реализовали на прошлом вебинаре
+        popularity = self.prep_data.loc[self.prep_data["user_id"]==user, ['item_id', 'quantity']].\
+                        groupby(['item_id'])['quantity'].count().reset_index()
+        popularity.sort_values('quantity', ascending=False, inplace=True)
+        top_item_list = popularity.loc[popularity["item_id"]!=999999, "item_id"][:rec_num].tolist()
+        
+        res = set()
+        for item in top_item_list:
+            res.add(self.id_to_itemid[self.model.similar_items(self.itemid_to_id[item], N=1)[0][0]])
 
-        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+#         assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
 
-    def get_similar_users_recommendation(self, user, N=5):
+    def get_similar_users_recommendation(self, user, rec_num=5):
         """Рекомендуем топ-N товаров, среди купленных похожими юзерами"""
 
-    # your_code
-
-    pass
-    
-    # assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
-    # return res
+        sim_users_list = [self.id_to_userid[usr] for usr, p in self.model.similar_users(self.userid_to_id[user], N=rec_num)]
+        res = set()
+        for user_in in sim_users_list:
+            res.add(list(self.get_recommendations(user_in, rec_num=1))[0])
+            
+        i = 2
+        while len(res) < rec_num:
+            res.add(list(self.get_recommendations(sim_users_list[1], rec_num=i))[i-1])
+            i += 1
+        
+#         assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        return res
