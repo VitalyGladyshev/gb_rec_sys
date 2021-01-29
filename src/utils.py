@@ -1,6 +1,6 @@
 import pandas as pd
 
-def prefilter_items(data):
+def prefilter_items(data, item_features):
     # Оставим только 5000 самых популярных товаров
     popularity = data.groupby('item_id')['quantity'].sum().reset_index()
     popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
@@ -20,12 +20,17 @@ def prefilter_items(data):
     data.loc[data['item_id'].isin(unpop_list), 'item_id'] = 999999
     
     # Уберем товары, которые не продавались за последние 12 месяцев
+    curr_week = data['week_no'].values.max()
+    data.loc[data['week_no']<curr_week-53, 'item_id'] = 999999
     
     # Уберем не интересные для рекоммендаций категории (department)
+    for dep in dep_list:
+        drop_items_list = item_features.loc[item_features['department'] == dep, "item_id"].values
+        data.loc[data['item_id'].isin(drop_items_list), 'item_id'] = 999999
     
     # Уберем слишком дешевые товары (на них не заработаем). 1 покупка из рассылок стоит 60 руб. 
     
-    # Уберем слишком дорогие товарыs
+    # Уберем слишком дорогие товары
     
     # ...
     
