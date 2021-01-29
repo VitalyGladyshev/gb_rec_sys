@@ -33,12 +33,16 @@ def prefilter_items(data, item_features):
         data.loc[data['item_id'].isin(drop_items_list), 'item_id'] = 999999
     
     # Уберем слишком дешевые товары (на них не заработаем). 1 покупка из рассылок стоит 60 руб. 
+    mean_price = data.groupby('item_id')['quantity', "sales_value"].sum()
+    mean_price["mean_price"] = mean_price["sales_value"] / mean_price["quantity"]
+    cheap_list = mean_price.loc[mean_price["mean_price"]<0.9].index.tolist()
+    data.loc[data['item_id'].isin(cheap_list), 'item_id'] = 999999
     
     # Уберем слишком дорогие товары
+    luxury_list = mean_price.loc[mean_price["mean_price"]>1500].index.tolist()
+    data.loc[data['item_id'].isin(luxury_list), 'item_id'] = 999999
     
     # ...
-    
-    
     
     return data
 
