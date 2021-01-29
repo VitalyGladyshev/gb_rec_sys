@@ -24,6 +24,10 @@ def prefilter_items(data, item_features):
     data.loc[data['week_no']<curr_week-53, 'item_id'] = 999999
     
     # Уберем не интересные для рекоммендаций категории (department)
+    dep_list = ['DRUG GM', 'KIOSK-GAS', 'COUP/STR & MFG', 'PROD-WHS SALES',
+                'RX', 'MEAT-WHSE', 'HBC', 'CNTRL/STORE SUP', 'POSTAL CENTER', 
+                'PHOTO', 'VIDEO', 'PHARMACY SUPPLY']
+    
     for dep in dep_list:
         drop_items_list = item_features.loc[item_features['department'] == dep, "item_id"].values
         data.loc[data['item_id'].isin(drop_items_list), 'item_id'] = 999999
