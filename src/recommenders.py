@@ -10,8 +10,7 @@ from implicit.nearest_neighbours import ItemItemRecommender  # нужен для
 from implicit.nearest_neighbours import bm25_weight, tfidf_weight
 
 import os, sys
-
-module_path = os.getcwd()
+module_path = os.path.abspath(os.path.join(os.pardir))
 if module_path not in sys.path:
     sys.path.append(module_path)
     
@@ -30,23 +29,38 @@ class MainRecommender:
         Матрица взаимодействий user-item
     """
 
-    def __init__(self, data, item_features, weighting=True):
-        # your_code. Это не обязательная часть. Но если вам удобно что-либо посчитать тут - можно это сделать
-
-        self.prep_data = prefilter_items(data, item_features)
+    def __init__(self, data, item_features, user_features):
+        self.prep_data = data   # self.prep_data = prefilter_items(data, item_features)
+#         self.item_features = item_features
+#         self.user_features = user_features
         self.user_item_matrix = self.prepare_matrix(self.prep_data)  # pd.DataFrame
+        self.user_item_matrix_tfidf = self.prepare_matrix(self.prep_data)
+        self.user_item_matrix_tfidf = tfidf_weight(self.user_item_matrix_tfidf.T).T
+        self.user_item_matrix_bm25 = self.prepare_matrix(self.prep_data)
+        self.user_item_matrix_bm25 = bm25_weight(self.user_item_matrix_bm25.T).T
         self.id_to_itemid, self.id_to_userid, \
         self.itemid_to_id, self.userid_to_id = self.prepare_dicts(self.user_item_matrix)
 
-        if weighting:
-            self.user_item_matrix = bm25_weight(self.user_item_matrix.T).T
+        self.user_feat = pd.DataFrame(self.user_item_matrix.index)
+        self.user_feat = self.user_feat.merge(user_features, on='user_id', how='left')
+        self.user_feat.set_index('user_id', inplace=True)
+        self.user_feat = self.user_feat.fillna("")
+        self.user_feat_lightfm = pd.get_dummies(self.user_feat, columns=self.user_feat.columns.tolist())
 
-        self.model = self.fit(self.user_item_matrix)
+        self.item_feat = pd.DataFrame(self.user_item_matrix.columns)
+        self.item_feat = self.item_feat.merge(item_features, on='item_id', how='left')
+        self.item_feat.set_index('item_id', inplace=True)
+        self.item_feat = self.item_feat.fillna("")
+        self.item_feat_lightfm = pd.get_dummies(self.item_feat, columns=self.item_feat.columns.tolist())
+        
+        self.model       = self.fit(self.user_item_matrix)
+        self.model_tfidf = self.fit(self.user_item_matrix_tfidf)
+        self.model_bm25  = self.fit(self.user_item_matrix_bm25)
+#         self.model_lightfm = self.fit_lightfm()
         self.own_recommender = self.fit_own_recommender(self.user_item_matrix)
-
+        
     @staticmethod
     def prepare_matrix(data):
-        # your_code
 
         user_item_matrix = pd.pivot_table(data, 
                                           index='user_id',
@@ -87,7 +101,7 @@ class MainRecommender:
         return own_recommender
 
     @staticmethod
-    def fit(user_item_matrix, n_factors=20, regularization=0.001, iterations=15, num_threads=4):
+    def fit(user_item_matrix, n_factors=50, regularization=0.0001, iterations=15, num_threads=4):
         """Обучает ALS"""
 
         model = AlternatingLeastSquares(factors=n_factors,
@@ -97,7 +111,17 @@ class MainRecommender:
         model.fit(csr_matrix(user_item_matrix).T.tocsr(), show_progress=False)
 
         return model
+    
+#     def fit_lightfm(user_item_matrix_bm25, n_factors=50, regularization=0.0001, iterations=15, num_threads=4):
+#         """Обучает LightFM"""
 
+#         model = AlternatingLeastSquares(factors=n_factors,
+#                                         regularization=regularization,
+#                                         iterations=iterations,
+#                                         num_threads=num_threads)
+#         model.fit(csr_matrix(user_item_matrix_bm25).T.tocsr(), show_progress=False)
+
+#         return model
     
     def get_als_recommendations(self, user, rec_num=5):
         """Рекомендуем топ-N товаров"""
@@ -109,6 +133,30 @@ class MainRecommender:
                                              filter_already_liked_items=False, 
                                              filter_items=[self.itemid_to_id[999999]],  # !!! 
                                              recalculate_user=True)]
+        return res
+
+    def get_als_tfidf_recommendations(self, user, rec_num=5):
+        """Рекомендуем топ-N товаров"""
+
+        res = [self.id_to_itemid[rec[0]] for rec in 
+                        self.model_tfidf.recommend(userid=self.userid_to_id[user], 
+                                                 user_items=csr_matrix(self.user_item_matrix_tfidf).tocsr(), # tfidf
+                                                 N=rec_num, 
+                                                 filter_already_liked_items=False, 
+                                                 filter_items=[self.itemid_to_id[999999]],  # !!! 
+                                                 recalculate_user=True)]
+        return res
+
+    def get_als_bm25_recommendations(self, user, rec_num=5):
+        """Рекомендуем топ-N товаров"""
+
+        res = [self.id_to_itemid[rec[0]] for rec in 
+                        self.model_bm25.recommend(userid=self.userid_to_id[user], 
+                                                 user_items=csr_matrix(self.user_item_matrix).tocsr(), # bm25
+                                                 N=rec_num, 
+                                                 filter_already_liked_items=False, 
+                                                 filter_items=[self.itemid_to_id[999999]],  # !!! 
+                                                 recalculate_user=True)]
         return res
     
     def get_own_recommendations(self, user, rec_num=5):
