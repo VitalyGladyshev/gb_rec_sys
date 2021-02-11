@@ -2,12 +2,14 @@ import numpy as np
 import pandas as pd
 
 # Для работы с матрицами
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, coo_matrix
 
 # Матричная факторизация
 from implicit.als import AlternatingLeastSquares
 from implicit.nearest_neighbours import ItemItemRecommender  # нужен для одного трюка
 from implicit.nearest_neighbours import bm25_weight, tfidf_weight
+
+from lightfm import LightFM
 
 import os, sys
 module_path = os.path.abspath(os.path.join(os.pardir))
@@ -33,6 +35,7 @@ class MainRecommender:
         self.prep_data = data   # self.prep_data = prefilter_items(data, item_features)
 #         self.item_features = item_features
 #         self.user_features = user_features
+        print("user_item_matrix")
         self.user_item_matrix = self.prepare_matrix(self.prep_data)  # pd.DataFrame
         self.user_item_matrix_tfidf = self.prepare_matrix(self.prep_data)
         self.user_item_matrix_tfidf = tfidf_weight(self.user_item_matrix_tfidf.T).T
@@ -40,23 +43,30 @@ class MainRecommender:
         self.user_item_matrix_bm25 = bm25_weight(self.user_item_matrix_bm25.T).T
         self.id_to_itemid, self.id_to_userid, \
         self.itemid_to_id, self.userid_to_id = self.prepare_dicts(self.user_item_matrix)
-
+        
+        print("user_feat")
         self.user_feat = pd.DataFrame(self.user_item_matrix.index)
         self.user_feat = self.user_feat.merge(user_features, on='user_id', how='left')
         self.user_feat.set_index('user_id', inplace=True)
         self.user_feat = self.user_feat.fillna("")
         self.user_feat_lightfm = pd.get_dummies(self.user_feat, columns=self.user_feat.columns.tolist())
-
+        
+        print("item_feat")
         self.item_feat = pd.DataFrame(self.user_item_matrix.columns)
         self.item_feat = self.item_feat.merge(item_features, on='item_id', how='left')
         self.item_feat.set_index('item_id', inplace=True)
         self.item_feat = self.item_feat.fillna("")
         self.item_feat_lightfm = pd.get_dummies(self.item_feat, columns=self.item_feat.columns.tolist())
         
+        print("ALS model")
         self.model       = self.fit(self.user_item_matrix)
+        print("ALS TF-IDF model")
         self.model_tfidf = self.fit(self.user_item_matrix_tfidf)
+        print("ALS BM25 model")
         self.model_bm25  = self.fit(self.user_item_matrix_bm25)
-#         self.model_lightfm = self.fit_lightfm()
+        print("LightFM model")
+        self.model_lightfm = self.fit_lightfm(self.user_item_matrix, self.user_feat_lightfm, self.item_feat_lightfm)
+        print("Own")
         self.own_recommender = self.fit_own_recommender(self.user_item_matrix)
         
     @staticmethod
@@ -112,16 +122,31 @@ class MainRecommender:
 
         return model
     
-#     def fit_lightfm(user_item_matrix_bm25, n_factors=50, regularization=0.0001, iterations=15, num_threads=4):
-#         """Обучает LightFM"""
+    def fit_lightfm(self,
+                    user_item_matrix, 
+                    user_feat_lightfm, 
+                    item_feat_lightfm, 
+                    learning_rate=0.05, 
+                    epochs=15, 
+                    num_threads=4):
+        """Обучает LightFM"""
+        
+        sparse_user_item = csr_matrix(user_item_matrix).tocsr()   # .astype(np.float)
 
-#         model = AlternatingLeastSquares(factors=n_factors,
-#                                         regularization=regularization,
-#                                         iterations=iterations,
-#                                         num_threads=num_threads)
-#         model.fit(csr_matrix(user_item_matrix_bm25).T.tocsr(), show_progress=False)
+        model = LightFM(no_components=5,
+                        loss='bpr', # 'warp'
+                        learning_rate=0.05, 
+                        item_alpha=0.1, user_alpha=0.1, 
+                        random_state=42)
 
-#         return model
+        model.fit((sparse_user_item > 0) * 1,  # user-item matrix из 0 и 1
+                  sample_weight=coo_matrix(user_item_matrix),
+                  user_features=csr_matrix(user_feat_lightfm.values).tocsr(),
+                  item_features=csr_matrix(item_feat_lightfm.values).tocsr(),
+                  epochs=15, 
+                  num_threads=4) 
+
+        return model
     
     def get_als_recommendations(self, user, rec_num=5):
         """Рекомендуем топ-N товаров"""
