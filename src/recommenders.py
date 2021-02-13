@@ -177,7 +177,7 @@ class MainRecommender:
 
         res = [self.id_to_itemid[rec[0]] for rec in 
                         self.model_bm25.recommend(userid=self.userid_to_id[user], 
-                                                 user_items=csr_matrix(self.user_item_matrix).tocsr(), # bm25
+                                                 user_items=csr_matrix(self.user_item_matrix_bm25).tocsr(), # bm25
                                                  N=rec_num, 
                                                  filter_already_liked_items=False, 
                                                  filter_items=[self.itemid_to_id[999999]],  # !!! 
