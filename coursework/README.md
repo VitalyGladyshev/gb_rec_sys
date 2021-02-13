@@ -15,3 +15,7 @@ https://github.com/VitalyGladyshev/gb_rec_sys/blob/main/src/utils.py
 ### класс с моделями:
 
 https://github.com/VitalyGladyshev/gb_rec_sys/blob/main/src/recommenders.py
+
+## Модели и score
+
+https://github.com/VitalyGladyshev/gb_rec_sys/blob/main/coursework/cw_rec_sys_glvv.ipynb
